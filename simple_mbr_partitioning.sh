@@ -63,10 +63,31 @@ function _ensure_block_device_is_an_ide_or_scsi_disk() {
     fi
 }
 
+function _type_y_to_continue() {
+    local block_device="$1"
+
+    echo -n "This will unrecoverably repartition hard disk device ""$block_device"". Are you sure (Y/N)?"
+
+    local confirmation
+    while read -r -n 1 confirmation
+    do
+        if [ "${confirmation,,}" = "n" ]
+        then
+            echo -e "\nConfirmation declined."
+            exit 1
+        elif [ "${confirmation,,}" = "y" ]
+        then
+            echo -e ""
+            break
+        fi
+    done
+}
+
 _ensure_running_as_root
 _ensure_single_argument_provided "$@"
 _ensure_argument_is_block_device "$1"
 _ensure_block_device_is_an_ide_or_scsi_disk "$1"
+_type_y_to_continue "$1"
 
 echo "TODO - incomplete"
 
