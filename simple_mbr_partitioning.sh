@@ -22,7 +22,27 @@ function _ensure_running_as_root() {
     fi
 }
 
+function _ensure_single_argument_provided() {
+    local argument_count=$#
+    if [ $argument_count -ne 1 ]
+    then
+        echo "This script expects a single argument." 1>&2
+        exit 1
+    fi
+}
+
+function _ensure_argument_is_block_device() {
+    local block_device="$1"
+    if [ ! -b "$block_device" ]
+    then
+        echo "The script argument must be an existent block device." 1>&2
+        exit 1
+    fi
+}
+
 _ensure_running_as_root
+_ensure_single_argument_provided "$@"
+_ensure_argument_is_block_device "$1"
 
 echo "TODO - incomplete"
 
