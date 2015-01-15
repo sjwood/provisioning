@@ -50,7 +50,7 @@ function _ensure_block_device_is_an_ide_or_scsi_disk() {
         exit 1
     fi
 
-    local block_device_major_number=$(lsblk --noheadings --nodeps --output MAJ:MIN "$1" | tr --delete ' ' | cut --delimiter=: --fields=1)
+    local block_device_major_number=$(lsblk --noheadings --nodeps --raw --output MAJ:MIN "$1" | cut --delimiter=: --fields=1)
     # MAJ=3 is an IDE disk
     if [ "$block_device_major_number" != "3" ]
     then
@@ -83,14 +83,65 @@ function _type_y_to_continue() {
     done
 }
 
+function _create_new_mbr_partition_table() {
+    local block_device="$1"
+
+    echo -e "o\nw" | fdisk "$block_device" &> /dev/null
+}
+
+function _create_swap_partition() {
+    local block_device="$1"
+
+    # calculate the size of the current installed memory
+    local dimm_sizes=($(dmidecode --type memory | grep Size | awk '{ print $2; }'))
+    local dimm_units=($(dmidecode --type memory | grep Size | awk '{ print $3; }'))
+    local dimm_count=${#dimm_sizes[@]}
+    local total_memory_in_bytes=0
+    for i in $(seq 0 $(($dimm_count-1)))
+    do
+        local size=${dimm_sizes[$i]}
+        local units=${dimm_units[$i]}
+        local units_in_bytes=0
+        case "$units" in
+            "MB")
+                units_in_bytes=$((1024*1024))
+                ;;
+            *)
+                echo "Unrecognised Memory unit $units"
+                exit 1
+        esac
+        local size_in_bytes=$(($size*$units_in_bytes))
+        let total_memory_in_bytes+=$size_in_bytes
+    done
+
+    # calculate swap partition as twice the size of the RAM
+    local swap_size_in_sectors=$(($total_memory_in_bytes*2/512))
+    local last_swap_sector=$(($swap_size_in_sectors-1))
+
+    local partition_number=1
+    echo -e "n\np\n$partition_number\n\n+$last_swap_sector\nt\n82\nw" | fdisk "$block_device" &> /dev/null
+
+    mkswap -L swap "$block_device$partition_number" &> /dev/null
+}
+
+function _create_main_partition() {
+    local block_device="$1"
+
+    local partition_number=2
+    echo -e "n\np\n$partition_number\n\n\nt\n2\n83\nw" | fdisk "$block_device" &> /dev/null
+
+    mkfs.ext4 -L system "$block_device$partition_number" &> /dev/null
+}
+
 _ensure_running_as_root
 _ensure_single_argument_provided "$@"
 _ensure_argument_is_block_device "$1"
 _ensure_block_device_is_an_ide_or_scsi_disk "$1"
 _type_y_to_continue "$1"
+_create_new_mbr_partition_table "$1"
+_create_swap_partition "$1"
+_create_main_partition "$1"
 
-echo "TODO - incomplete"
+echo "Finished."
 
 exit 0
-
-
