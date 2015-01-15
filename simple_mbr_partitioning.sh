@@ -40,9 +40,33 @@ function _ensure_argument_is_block_device() {
     fi
 }
 
+function _ensure_block_device_is_an_ide_or_scsi_disk() {
+    local block_device="$1"
+
+    local block_device_type=$(lsblk --noheadings --nodeps --raw "$1" --output TYPE)
+    if [ "$block_device_type" != "disk" ]
+    then
+        echo "The script argument must be an IDE or SCSI disk." 1>&2
+        exit 1
+    fi
+
+    local block_device_major_number=$(lsblk --noheadings --nodeps --output MAJ:MIN "$1" | tr --delete ' ' | cut --delimiter=: --fields=1)
+    # MAJ=3 is an IDE disk
+    if [ "$block_device_major_number" != "3" ]
+    then
+        # MAJ=8 is a SCSI (or SATA) disk
+        if [ "$block_device_major_number" != "8" ]
+        then
+            echo "The script argument must be an IDE or SCSI disk." 1>&2
+            exit 1
+        fi
+    fi
+}
+
 _ensure_running_as_root
 _ensure_single_argument_provided "$@"
 _ensure_argument_is_block_device "$1"
+_ensure_block_device_is_an_ide_or_scsi_disk "$1"
 
 echo "TODO - incomplete"
 
