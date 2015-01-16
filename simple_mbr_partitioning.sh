@@ -128,7 +128,7 @@ function _create_main_partition() {
     local block_device="$1"
 
     local partition_number=2
-    echo -e "n\np\n$partition_number\n\n\nt\n2\n83\nw" | fdisk "$block_device" &> /dev/null
+    echo -e "n\np\n$partition_number\n\n\nt\n$partition_number\n83\nw" | fdisk "$block_device" &> /dev/null
 
     mkfs.ext4 -L system "$block_device$partition_number" &> /dev/null
 }
