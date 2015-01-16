@@ -14,6 +14,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+function _ensure_tooling_available() {
+    local required_tools=("lsblk" "cut" "fdisk" "dmidecode" "grep" "awk" "mkswap" "mkfs.ext4")
+
+    local are_tools_missing=0
+
+    local tool
+    for tool in ${required_tools[@]}
+    do
+        local tool_path
+        tool_path=$(which "$tool")
+
+        if [ $? -ne 0 ]
+        then
+            echo "$tool is required by this script but is not available."
+            are_tools_missing=1
+        fi
+    done
+
+    if [ "$are_tools_missing" -eq "1" ]
+    then
+        exit 1
+    fi
+}
+
 function _ensure_running_as_root() {
     if [ "$EUID" -ne 0 ]
     then
@@ -133,6 +157,7 @@ function _create_main_partition() {
     mkfs.ext4 -L system "$block_device$partition_number" &> /dev/null
 }
 
+_ensure_tooling_available
 _ensure_running_as_root
 _ensure_single_argument_provided "$@"
 _ensure_argument_is_block_device "$1"
