@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-function _ensure_tooling_available() {
+function ensure_tooling_available() {
     local required_tools=("lsblk" "cut" "fdisk" "dmidecode" "grep" "awk" "mkswap" "mkfs.ext4")
 
     local are_tools_missing=0
@@ -38,7 +38,7 @@ function _ensure_tooling_available() {
     fi
 }
 
-function _ensure_running_as_root() {
+function ensure_running_as_root() {
     if [ "$EUID" -ne 0 ]
     then
         echo "This script must be run as root." 1>&2
@@ -46,7 +46,7 @@ function _ensure_running_as_root() {
     fi
 }
 
-function _ensure_single_argument_provided() {
+function ensure_single_argument_provided() {
     local argument_count=$#
     if [ $argument_count -ne 1 ]
     then
@@ -55,7 +55,7 @@ function _ensure_single_argument_provided() {
     fi
 }
 
-function _ensure_argument_is_block_device() {
+function ensure_argument_is_block_device() {
     local block_device="$1"
     if [ ! -b "$block_device" ]
     then
@@ -64,7 +64,7 @@ function _ensure_argument_is_block_device() {
     fi
 }
 
-function _ensure_block_device_is_an_ide_or_scsi_disk() {
+function ensure_block_device_is_an_ide_or_scsi_disk() {
     local block_device="$1"
 
     local block_device_type=$(lsblk --noheadings --nodeps --raw "$1" --output TYPE)
@@ -81,13 +81,13 @@ function _ensure_block_device_is_an_ide_or_scsi_disk() {
         # MAJ=8 is a SCSI (or SATA) disk
         if [ "$block_device_major_number" != "8" ]
         then
-            echo "The script argument must be an IDE or SCSI disk." 1>&2
+            echo "The script argument must be an IDE or SCSI disk device." 1>&2
             exit 1
         fi
     fi
 }
 
-function _type_y_to_continue() {
+function type_y_to_continue() {
     local block_device="$1"
 
     echo -n "This will unrecoverably repartition hard disk device ""$block_device"". Are you sure (Y/N)?"
@@ -107,14 +107,15 @@ function _type_y_to_continue() {
     done
 }
 
-function _create_new_mbr_partition_table() {
+function create_new_mbr_partition_table() {
     local block_device="$1"
 
     echo -e "o\nw" | fdisk "$block_device" &> /dev/null
 }
 
-function _create_swap_partition() {
+function create_swap_partition() {
     local block_device="$1"
+    local partition_number="$2"
 
     # calculate the size of the current installed memory
     local dimm_sizes=($(dmidecode --type memory | grep Size | awk '{ print $2; }'))
@@ -142,30 +143,29 @@ function _create_swap_partition() {
     local swap_size_in_sectors=$(($total_memory_in_bytes*2/512))
     local last_swap_sector=$(($swap_size_in_sectors-1))
 
-    local partition_number=1
     echo -e "n\np\n$partition_number\n\n+$last_swap_sector\nt\n82\nw" | fdisk "$block_device" &> /dev/null
 
     mkswap -L swap "$block_device$partition_number" &> /dev/null
 }
 
-function _create_main_partition() {
+function create_main_partition() {
     local block_device="$1"
+    local partition_number="$2"
 
-    local partition_number=2
     echo -e "n\np\n$partition_number\n\n\nt\n$partition_number\n83\nw" | fdisk "$block_device" &> /dev/null
 
     mkfs.ext4 -L system "$block_device$partition_number" &> /dev/null
 }
 
-_ensure_tooling_available
-_ensure_running_as_root
-_ensure_single_argument_provided "$@"
-_ensure_argument_is_block_device "$1"
-_ensure_block_device_is_an_ide_or_scsi_disk "$1"
-_type_y_to_continue "$1"
-_create_new_mbr_partition_table "$1"
-_create_swap_partition "$1"
-_create_main_partition "$1"
+ensure_tooling_available
+ensure_running_as_root
+ensure_single_argument_provided "$@"
+ensure_argument_is_block_device "$1"
+ensure_block_device_is_an_ide_or_scsi_disk "$1"
+type_y_to_continue "$1"
+create_new_mbr_partition_table "$1"
+create_swap_partition "$1" 1
+create_main_partition "$1" 2
 
 echo "Finished."
 
