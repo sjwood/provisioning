@@ -155,6 +155,21 @@ function reduce_chance_of_swapping_to_disk() {
     fi
 }
 
+function change_scheduler_to_deadline() {
+    local block_device="$1"
+
+    local block_device_identifier=$(lsblk --noheadings --nodeps --raw --output KNAME "$block_device")
+
+    local is_not_deadline
+    cat "/sys/block/$block_device_identifier/queue/scheduler" | grep "\[deadline\]" > /dev/null
+    is_not_deadline="$?"
+
+    if [ "$is_not_deadline" == "1" ]
+    then
+        echo "deadline" > "/sys/block/$block_device_identifier/queue/scheduler"
+    fi
+}
+
 ensure_tooling_available
 ensure_running_as_root
 ensure_single_argument_provided "$@"
@@ -163,6 +178,7 @@ ensure_block_device_is_an_ide_or_scsi_disk "$1"
 ensure_block_device_is_an_ssd "$1"
 reduce_writes_on_ext4_partitions_with_noatime "$1"
 reduce_chance_of_swapping_to_disk
+change_scheduler_to_deadline "$1"
 
 echo "TODO - complete"
 
