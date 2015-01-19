@@ -15,7 +15,7 @@
 # limitations under the License.
 
 function ensure_tooling_available() {
-    local required_tools=("lsblk" "cut" "cat" "blkid" "grep" "sed" "awk" "mount" "rm")
+    local required_tools=("lsblk" "cut" "cat" "blkid" "grep" "sed" "awk" "mount" "rm" "wget" "tar" "file" "find" "mv")
 
     local are_tools_missing=0
 
@@ -151,6 +151,52 @@ function enable_trim_on_ext4_partitions() {
     __set_option_on_partition_types "$block_device" "$partition_type" "$option"
 }
 
+function disable_trim_cron_job() {
+    if [ -f /etc/cron.weekly/fstrim ]
+    then
+        rm /etc/cron.weekly/fstrim
+    fi
+}
+
+function install_magician_if_device_is_samsung_ssd() {
+    local block_device="$1"
+
+    local ssd_model=$(lsblk --noheadings --nodeps --raw --output MODEL "$block_device" | cut --delimiter=' ' --fields=1 | awk '{ print tolower($0); }')
+
+    if [ "$ssd_model" == "samsung" ]
+    then
+        local magician_path
+        magician_path=$(which magician)
+
+        if [ $? -ne 0 ]
+        then
+            local temporary_folder=$(mktemp --directory)
+
+            wget --quiet --output-document=- "http://www.samsung.com/global/business/semiconductor/minisite/SSD/downloads/software/samsung_magician_dc-v1.0_rtm_p2.tar.gz" | tar --extract --gzip --no-same-owner --directory="$temporary_folder"
+
+            local bash_executable=$(which bash)
+
+            local bash_executable_type=$(file --brief "$bash_executable" | cut --delimiter=, --fields=1)
+
+            local magician_executables=($(find "$temporary_folder" -type f))
+
+            local magician_executable
+            for magician_executable in ${magician_executables[@]}
+            do
+                local magician_executable_type=$(file --brief "$magician_executable" | cut --delimiter=, --fields=1)
+
+                if [ "$magician_executable_type" == "$bash_executable_type" ]
+                then
+                    mv "$magician_executable" "/usr/local/sbin/magician"
+                    break
+                fi
+            done
+
+            rm -rf "$temporary_folder"
+        fi
+    fi
+}
+
 function __set_option_on_partition_types() {
     local block_device="$1"
     local partition_type="$2"
@@ -188,13 +234,6 @@ function __set_option_on_partition_types() {
     done
 }
 
-function disable_trim_cron_job() {
-    if [ -f /etc/cron.weekly/fstrim ]
-    then
-        rm /etc/cron.weekly/fstrim
-    fi
-}
-
 ensure_tooling_available
 ensure_running_as_root
 ensure_single_argument_provided "$@"
@@ -206,6 +245,7 @@ reduce_chance_of_swapping_to_disk
 change_scheduler_to_deadline "$1"
 enable_trim_on_ext4_partitions "$1"
 disable_trim_cron_job
+install_magician_if_device_is_samsung_ssd "$1"
 
 echo "TODO - complete"
 
