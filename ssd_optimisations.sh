@@ -133,6 +133,28 @@ function reduce_writes_on_ext4_partitions_with_noatime() {
     done
 }
 
+function reduce_chance_of_swapping_to_disk() {
+    local swappiness=$(cat /proc/sys/vm/swappiness)
+
+    if [ "$swappiness" != "0" ]
+    then
+        local is_swappiness_setting_missing
+        cat /etc/sysctl.conf | grep vm.swappiness > /dev/null
+        is_swappiness_setting_missing="$?"
+
+        local swappiness_setting="vm.swappiness = 0"
+
+        if [ "$is_swappiness_setting_missing" == "1" ]
+        then
+            echo "$swappiness_setting" >> /etc/sysctl.conf
+        else
+            sed -i "s/^vm.swappiness = .*/$swappiness_setting/" /etc/sysctl.conf
+        fi
+
+        sysctl vm.swappiness=0 > /dev/null
+    fi
+}
+
 ensure_tooling_available
 ensure_running_as_root
 ensure_single_argument_provided "$@"
@@ -140,6 +162,7 @@ ensure_argument_is_block_device "$1"
 ensure_block_device_is_an_ide_or_scsi_disk "$1"
 ensure_block_device_is_an_ssd "$1"
 reduce_writes_on_ext4_partitions_with_noatime "$1"
+reduce_chance_of_swapping_to_disk
 
 echo "TODO - complete"
 
