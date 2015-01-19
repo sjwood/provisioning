@@ -102,35 +102,9 @@ function ensure_block_device_is_an_ssd() {
 
 function reduce_writes_on_ext4_partitions_with_noatime() {
     local block_device="$1"
-
-    local partitions=($(blkid -t TYPE=ext4 -o device))
-
-    local partition
-    for partition in ${partitions[@]}
-    do
-        local partition_uuid=$(blkid "$partition" -s UUID -o value)
-
-        local fstab_line_number=$(cat /etc/fstab | grep -n "UUID=$partition_uuid" | cut --delimiter=: --fields=1)
-
-        local existing_options=$(sed $fstab_line_number'!d' /etc/fstab | awk '{ print $4; }')
-
-        local is_option_missing
-        echo $existing_options | grep "noatime" > /dev/null
-        is_option_missing="$?"
-
-        if [ "$is_option_missing" == "1" ]
-        then
-            local option_delimiter=","
-            if [ -z "$existing_options" ]
-            then
-                option_delimiter=""
-            fi
-
-            local new_options=$existing_options$option_delimiter"noatime"
-
-            sed -i -e $fstab_line_number"s/"$existing_options"/"$new_options"/" /etc/fstab
-        fi
-    done
+    local partition_type="ext4"
+    local option="noatime"
+    __set_option_on_partition_types "$block_device" "$partition_type" "$option"
 }
 
 function reduce_chance_of_swapping_to_disk() {
@@ -170,6 +144,50 @@ function change_scheduler_to_deadline() {
     fi
 }
 
+function enable_trim_on_ext4_partitions() {
+    local block_device="$1"
+    local partition_type="ext4"
+    local option="discard"
+    __set_option_on_partition_types "$block_device" "$partition_type" "$option"
+}
+
+function __set_option_on_partition_types() {
+    local block_device="$1"
+    local partition_type="$2"
+    local option="$3"
+
+    local partitions=($(blkid -t TYPE="$partition_type" -o device))
+
+    local partition
+    for partition in ${partitions[@]}
+    do
+        local partition_uuid=$(blkid "$partition" -s UUID -o value)
+
+        local fstab_line_number=$(cat /etc/fstab | grep -n "UUID=$partition_uuid" | cut --delimiter=: --fields=1)
+
+        local existing_options=$(sed $fstab_line_number'!d' /etc/fstab | awk '{ print $4; }')
+
+        local is_option_missing
+        echo $existing_options | grep "$option" > /dev/null
+        is_option_missing="$?"
+
+        if [ "$is_option_missing" == "1" ]
+        then
+            local option_delimiter=","
+            if [ -z "$existing_options" ]
+            then
+                option_delimiter=""
+            fi
+
+            local new_options="$existing_options$option_delimiter$option"
+
+            sed -i -e $fstab_line_number"s/"$existing_options"/"$new_options"/" /etc/fstab
+
+            mount -o remount "$partition"
+        fi
+    done
+}
+
 ensure_tooling_available
 ensure_running_as_root
 ensure_single_argument_provided "$@"
@@ -179,6 +197,7 @@ ensure_block_device_is_an_ssd "$1"
 reduce_writes_on_ext4_partitions_with_noatime "$1"
 reduce_chance_of_swapping_to_disk
 change_scheduler_to_deadline "$1"
+enable_trim_on_ext4_partitions "$1"
 
 echo "TODO - complete"
 
