@@ -15,7 +15,7 @@
 # limitations under the License.
 
 function ensure_tooling_available() {
-    local required_tools=("lsblk" "cut" "cat" "blkid" "grep" "sed" "awk" "mount" "rm" "wget" "tar" "file" "find" "mv")
+    local required_tools=("lsblk" "cut" "cat" "blkid" "grep" "sed" "awk" "mount" "rm" "wget" "tar" "file" "find" "mv" "mktemp" "hdparm" "tr")
 
     local are_tools_missing=0
 
@@ -197,6 +197,42 @@ function install_magician_if_device_is_samsung_ssd() {
     fi
 }
 
+function configure_overprovisioning_if_device_is_samsung_ssd() {
+    local block_device="$1"
+
+    local ssd_model=$(lsblk --noheadings --nodeps --raw --output MODEL "$block_device" | cut --delimiter=' ' --fields=1 | awk '{ print tolower($0); }')
+
+    if [ "$ssd_model" == "samsung" ]
+    then
+        local magician_path
+        magician_path=$(which magician)
+
+        if [ $? -eq 0 ]
+        then
+            local temporary_folder=$(mktemp --directory)
+
+            pushd "$temporary_folder" > /dev/null
+
+            local device_serial_number=$(hdparm -I "$block_device" | grep Serial\ Number: | sed "s/Serial\ Number://" | tr --delete [:space:])
+
+            local magician_disk_number=$(magician --list | grep "$device_serial_number" | cut --delimiter=\| --fields=2 | sed "s/*//" | tr --delete [:space:])
+
+            local recommended_overprovisioning=$(magician --disk "$magician_disk_number" --over-provision --query | grep "Recommended OP" | cut --delimiter=: --fields=2 | tr --delete [:space:])
+
+            local current_overprovisioning=$(magician --disk "$magician_disk_number" --over-provision --query | grep "Current OP" | cut --delimiter=: --fields=2 | tr --delete [:space:])
+
+            if [ "$current_overprovisioning" != "$recommended_overprovisioning" ]
+            then
+                magician --disk "$magician_disk_number" --over-provision --set > /dev/null
+            fi
+
+            popd > /dev/null
+
+            rm -rf "$temporary_folder"
+        fi
+    fi
+}
+
 function __set_option_on_partition_types() {
     local block_device="$1"
     local partition_type="$2"
@@ -246,6 +282,7 @@ change_scheduler_to_deadline "$1"
 enable_trim_on_ext4_partitions "$1"
 disable_trim_cron_job
 install_magician_if_device_is_samsung_ssd "$1"
+configure_overprovisioning_if_device_is_samsung_ssd "$1"
 
 echo "TODO - complete"
 
