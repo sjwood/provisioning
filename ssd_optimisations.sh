@@ -15,7 +15,7 @@
 # limitations under the License.
 
 function ensure_tooling_available() {
-    local required_tools=("lsblk" "cut")
+    local required_tools=("lsblk" "cut" "cat" "blkid" "grep" "sed" "awk")
 
     local are_tools_missing=0
 
@@ -100,12 +100,46 @@ function ensure_block_device_is_an_ssd() {
     fi
 }
 
+function reduce_writes_on_ext4_partitions_with_noatime() {
+    local block_device="$1"
+
+    local partitions=($(blkid -t TYPE=ext4 -o device))
+
+    local partition
+    for partition in ${partitions[@]}
+    do
+        local partition_uuid=$(blkid "$partition" -s UUID -o value)
+
+        local fstab_line_number=$(cat /etc/fstab | grep -n "UUID=$partition_uuid" | cut --delimiter=: --fields=1)
+
+        local existing_options=$(sed $fstab_line_number'!d' /etc/fstab | awk '{ print $4; }')
+
+        local is_option_missing
+        echo $existing_options | grep "noatime" > /dev/null
+        is_option_missing="$?"
+
+        if [ "$is_option_missing" == "1" ]
+        then
+            local option_delimiter=","
+            if [ -z "$existing_options" ]
+            then
+                option_delimiter=""
+            fi
+
+            local new_options=$existing_options$option_delimiter"noatime"
+
+            sed -i -e $fstab_line_number"s/"$existing_options"/"$new_options"/" /etc/fstab
+        fi
+    done
+}
+
 ensure_tooling_available
 ensure_running_as_root
 ensure_single_argument_provided "$@"
 ensure_argument_is_block_device "$1"
 ensure_block_device_is_an_ide_or_scsi_disk "$1"
 ensure_block_device_is_an_ssd "$1"
+reduce_writes_on_ext4_partitions_with_noatime "$1"
 
 echo "TODO - complete"
 
