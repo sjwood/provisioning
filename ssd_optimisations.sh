@@ -15,7 +15,7 @@
 # limitations under the License.
 
 function ensure_tooling_available() {
-    local required_tools=("lsblk" "cut" "cat" "blkid" "grep" "sed" "awk")
+    local required_tools=("lsblk" "cut" "cat" "blkid" "grep" "sed" "awk" "mount" "rm")
 
     local are_tools_missing=0
 
@@ -188,6 +188,13 @@ function __set_option_on_partition_types() {
     done
 }
 
+function disable_trim_cron_job() {
+    if [ -f /etc/cron.weekly/fstrim ]
+    then
+        rm /etc/cron.weekly/fstrim
+    fi
+}
+
 ensure_tooling_available
 ensure_running_as_root
 ensure_single_argument_provided "$@"
@@ -198,6 +205,7 @@ reduce_writes_on_ext4_partitions_with_noatime "$1"
 reduce_chance_of_swapping_to_disk
 change_scheduler_to_deadline "$1"
 enable_trim_on_ext4_partitions "$1"
+disable_trim_cron_job
 
 echo "TODO - complete"
 
