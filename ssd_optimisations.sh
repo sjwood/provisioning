@@ -15,7 +15,7 @@
 # limitations under the License.
 
 function ensure_tooling_available() {
-    local required_tools=("lsblk" "cut" "cat" "blkid" "grep" "sed" "awk" "mount" "rm" "wget" "tar" "file" "find" "mv" "mktemp" "hdparm" "tr")
+    local required_tools=("lsblk" "cut" "cat" "grep" "sed" "rm" "awk" "mktemp" "wget" "tar" "file" "find" "mv" "ln" "hdparm" "tr" "wc" "blkid" "mount")
 
     local are_tools_missing=0
 
@@ -187,7 +187,19 @@ function install_magician_if_device_is_samsung_ssd() {
 
                 if [ "$magician_executable_type" == "$bash_executable_type" ]
                 then
-                    mv "$magician_executable" "/usr/local/sbin/magician"
+                    local target_magician_directory="/usr/local/sbin"
+                    local target_magician_executable_name="magician_dc-v1.0"
+                    local target_magician_symbolic_name="magician"
+
+                    mv "$magician_executable" "$target_magician_directory/$target_magician_executable_name"
+                    chmod 555 "$target_magician_directory/$target_magician_executable_name"
+
+                    pushd "$target_magician_directory" > /dev/null
+
+                    ln --symbolic "$target_magician_executable_name" "$target_magician_symbolic_name"
+
+                    popd > /dev/null
+
                     break
                 fi
             done
@@ -233,6 +245,27 @@ function configure_overprovisioning_if_device_is_samsung_ssd() {
     fi
 }
 
+function reduce_writes_in_firefox_config() {
+    local firefox_path
+    firefox_path=$(which firefox)
+
+    if [ $? -eq 0 ]
+    then
+        local firefox_prefs_line_count=$(wc -l /etc/firefox/syspref.js | cut --delimiter=' ' --fields 1)
+
+        if [ "$firefox_prefs_line_count" == "0" ]
+        then
+            echo "//" >> /etc/firefox/syspref.js
+        fi
+
+        __add_preference_to_firefox_config "lockPref(\"browser.cache.disk.enable\", false)"
+
+        __add_preference_to_firefox_config "lockPref(\"browser.cache.memory.enable\", true)"
+
+        __add_preference_to_firefox_config "lockPref(\"browser.cache.memory.capacity\", 358400)"
+    fi
+}
+
 function __set_option_on_partition_types() {
     local block_device="$1"
     local partition_type="$2"
@@ -270,6 +303,19 @@ function __set_option_on_partition_types() {
     done
 }
 
+function __add_preference_to_firefox_config() {
+    local preference="$1"
+
+    local is_preference_set
+    cat /etc/firefox/syspref.js | grep "^$preference;" > /dev/null
+    is_preference_set="$?"
+
+    if [ "$is_preference_set" == "1" ]
+    then
+        echo "$preference;" >> /etc/firefox/syspref.js
+    fi
+}
+
 ensure_tooling_available
 ensure_running_as_root
 ensure_single_argument_provided "$@"
@@ -283,9 +329,10 @@ enable_trim_on_ext4_partitions "$1"
 disable_trim_cron_job
 install_magician_if_device_is_samsung_ssd "$1"
 configure_overprovisioning_if_device_is_samsung_ssd "$1"
+reduce_writes_in_firefox_config
 
-echo "TODO - complete"
+echo "Finished."
 
-exit 1
+exit 0
 
 
