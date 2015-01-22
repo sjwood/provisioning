@@ -2,7 +2,7 @@
 
 ## Overview
 
-provisioning is a collection of scripts that automate the application of system configuration.
+[provisioning][1] is a collection of scripts that automate the application of system configuration.
 
 ## Recipes
 
@@ -13,20 +13,21 @@ provisioning is a collection of scripts that automate the application of system 
 ```bash
 $ wget --quiet "https://raw.githubusercontent.com/sjwood/provisioning/master/simple_mbr_partitioning.sh"
 $ chmod u+x simple_mbr_partitioning.sh
-$ ./simple_mbr_partitioning.sh
+$ sudo ./simple_mbr_partitioning.sh /dev/sda
 ```
-  3. Install operating system (probably some flavour of [Debian][1])...
+  3. Install operating system (probably some flavour of [Debian][2])...
   4. Download and execute the SSD optimisations script (if appropriate):
 ```bash
 $ wget --quiet "https://raw.githubusercontent.com/sjwood/provisioning/master/ssd_optimisations.sh"
 $ chmod u+x ssd_optimisations.sh
-$ ./ssd_optimisations.sh
+$ sudo ./ssd_optimisations.sh /dev/sda
 ```
 
 ## License
 
-provisioning is released under the [Apache 2.0 license][2]
+[provisioning][1] is released under the [Apache 2.0 license][3]
 
-  [1]: https://www.debian.org
-  [2]: http://opensource.org/licenses/Apache-2.0
+  [1]: https://github.com/sjwood/provisioning
+  [2]: https://www.debian.org
+  [3]: http://opensource.org/licenses/Apache-2.0
 
