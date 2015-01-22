@@ -15,7 +15,7 @@
 # limitations under the License.
 
 function ensure_tooling_available() {
-    local required_tools=("lsblk" "cut" "cat" "grep" "sed" "rm" "awk" "mktemp" "wget" "tar" "file" "find" "mv" "ln" "hdparm" "tr" "wc" "blkid" "mount")
+    local required_tools=("lsblk" "cut" "cat" "grep" "sed" "rm" "awk" "mktemp" "wget" "tar" "file" "find" "mv" "ln" "hdparm" "tr" "funzip" "innoextract" "df" "wc" "blkid" "mount")
 
     local are_tools_missing=0
 
@@ -245,6 +245,77 @@ function configure_overprovisioning_if_device_is_samsung_ssd() {
     fi
 }
 
+function install_secure_erase_bootable_iso_if_device_is_samsung_ssd() {
+    local block_device="$1"
+
+    local ssd_model=$(lsblk --noheadings --nodeps --raw --output MODEL "$block_device" | cut --delimiter=' ' --fields=1 | awk '{ print tolower($0); }')
+
+    if [ "$ssd_model" == "samsung" ]
+    then
+        local grub_config_file="/boot/grub/grub.cfg"
+
+        if [ -f "$grub_config_file" ]
+        then
+            local samsung_secure_erase_iso_full_path="/boot/iso/sece.iso"
+
+            if [ ! -f "$samsung_secure_erase_iso_full_path" ]
+            then
+                local temporary_folder=$(mktemp --directory)
+
+                local setup_file_path="$temporary_folder/setup.exe"
+
+                wget --quiet --output-document=- "http://www.samsung.com/global/business/semiconductor/minisite/SSD/downloads/software/Samsung_Magician_Setup_v45.zip" | funzip > "$setup_file_path"
+
+                local extracted_folder_path="$temporary_folder/extracted"
+
+                mkdir --parents "$extracted_folder_path"
+                innoextract --extract --silent --output-dir "$extracted_folder_path" "$setup_file_path"
+
+                local samsung_secure_erase_iso_file_name=$(basename "$samsung_secure_erase_iso_full_path")
+
+                local target_file=$(find "$extracted_folder_path" -type f -name "$samsung_secure_erase_iso_file_name")
+
+                local samsung_secure_erase_iso_folder_path=$(dirname "$samsung_secure_erase_iso_full_path")
+                mkdir --parents "$samsung_secure_erase_iso_folder_path"
+
+                mv "$target_file" "$samsung_secure_erase_iso_full_path"
+                chmod 444 "$samsung_secure_erase_iso_full_path"
+
+                rm -rf "$temporary_folder"
+            fi
+
+            local custom_grub_file="/etc/grub.d/40_custom"
+
+            local is_grub_entry_missing
+            cat "$custom_grub_file" | grep "Samsung SSD Secure Erase Utility (v4.5) ISO" > /dev/null
+            is_grub_entry_missing="$?"
+
+            if [ "$is_grub_entry_missing" == "1" ]
+            then
+                local boot_block_device=$(df --output=source /boot | awk '{ if (NR!=1) { print $0;}; }')
+
+                local boot_block_device_identifier=$(lsblk --noheadings --nodeps --raw --output KNAME "$boot_block_device")
+
+                local boot_drive_letter=$(echo "$boot_block_device_identifier" | rev | cut -c2 | rev)
+
+                local boot_drive_ascii_character_code=$(printf '%d' "'$boot_drive_letter")
+
+                local boot_drive=$((boot_drive_ascii_character_code - 97))
+
+                local boot_partition=$(echo "$boot_block_device_identifier" | rev | cut -c1 | rev)
+
+                echo 'menuentry "Samsung SSD Secure Erase Utility (v4.5) ISO" {' >> "$custom_grub_file"
+                echo -e '\tloopback loop (hd'"$boot_drive"','"$boot_partition"')"'"$samsung_secure_erase_iso_full_path"'"' >> "$custom_grub_file"
+                echo -e '\tlinux16 (loop)/isolinux/memdisk' >> "$custom_grub_file"
+                echo -e '\tinitrd16 (loop)/isolinux/btdsk.img' >> "$custom_grub_file"
+                echo '}' >> "$custom_grub_file"
+            fi
+
+            update-grub 2> /dev/null
+        fi
+    fi
+}
+
 function reduce_writes_in_firefox_config() {
     local firefox_path
     firefox_path=$(which firefox)
@@ -329,6 +400,7 @@ enable_trim_on_ext4_partitions "$1"
 disable_trim_cron_job
 install_magician_if_device_is_samsung_ssd "$1"
 configure_overprovisioning_if_device_is_samsung_ssd "$1"
+install_secure_erase_bootable_iso_if_device_is_samsung_ssd "$1"
 reduce_writes_in_firefox_config
 
 echo "Finished."
