@@ -9,7 +9,7 @@
 ### New laptop install
 
   1. Set **SATA Mode** in the BIOS to **AHCI**
-  2. Download and execute the simple provisioning script:
+  2. Download and execute the provisioning script:
 ```bash
 $ wget --quiet "https://raw.githubusercontent.com/sjwood/provisioning/master/simple_mbr_partitioning.sh"
 $ chmod u+x simple_mbr_partitioning.sh
@@ -21,6 +21,16 @@ $ sudo ./simple_mbr_partitioning.sh /dev/sda
 $ wget --quiet "https://raw.githubusercontent.com/sjwood/provisioning/master/ssd_optimisations.sh"
 $ chmod u+x ssd_optimisations.sh
 $ sudo ./ssd_optimisations.sh /dev/sda
+```
+
+### External USB disk
+
+  1. Plugin device
+  2. Download and execute the provisioning script:
+```bash
+$ wget --quiet "https://raw.githubusercontent.com/sjwood/provisioning/master/usb_disk_preparation.sh"
+$ chmod u+x usb_disk_preparation.sh
+$ sudo ./usb_disk_preparation.sh /dev/sdb backup
 ```
 
 ## License
